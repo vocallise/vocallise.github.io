@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculatrice de Facture de Doublage - VocalLise</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f9f9f9;
+            line-height: 1.6;
+            color: #333;
+        }
+        h1, h2 {
+            text-align: center;
+            color: #2c3e50;
+        }
+        form {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+        label {
+            display: block;
+            margin-top: 20px;
+            font-weight: bold;
+        }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+        .button-group {
+            margin-top: 30px;
+            text-align: center;
+        }
+        button {
+            padding: 12px 30px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 0 10px;
+        }
+        #calculateBtn {
+            background-color: #28a745;
+            color: white;
+        }
+        #calculateBtn:hover {
+            background-color: #218838;
+        }
+        #resetBtn {
+            background-color: #dc3545;
+            color: white;
+        }
+        #resetBtn:hover {
+            background-color: #c82333;
+        }
+        #results, #invoice {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            margin-top: 30px;
+        }
+        #invoice {
+            display: none;
+        }
+        .invoice-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 40px;
+            flex-wrap: wrap;
+        }
+        .sender, .client {
+            width: 45%;
+        }
+        .client {
+            text-align: right;
+        }
+        .client pre {
+            text-align: right;
+            margin: 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 30px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: right;
+        }
+        th {
+            background-color: #f8f9fa;
+            text-align: left;
+            font-weight: normal;
+        }
+        .total-row {
+            font-weight: bold;
+            background-color: #e9ecef;
+            font-size: 1.1em;
+        }
+        .dates {
+            margin: 30px 0;
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .date-item {
+            min-width: 200px;
+        }
+        @media (max-width: 768px) {
+            .invoice-header {
+                flex-direction: column;
+            }
+            .sender, .client {
+                width: 100%;
+                text-align: left;
+            }
+            .client pre {
+                text-align: left;
+            }
+            button {
+                width: 100%;
+                margin: 10px 0;
+            }
+        }
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #invoice, #invoice * {
+                visibility: visible;
+            }
+            #invoice {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                display: block !important;
+                box-shadow: none;
+            }
+            form, #results {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Calculatrice de Facture de Doublage - VocalLise</h1>
+
+    <form id="invoiceForm">
+        <label for="serviceType">Type de Service :</label>
+        <select id="serviceType" onchange="updateBaseAmount()">
+            <option value="Mini service">Mini service (183,14 €)</option>
+            <option value="Service">Service (257,78 €)</option>
+            <option value="Service chant">Service chant (385,35 €)</option>
+            <option value="Service docu">Service docu (249,15 €)</option>
+            <option value="Service Web">Service Web (467,62 €)</option>
+            <option value="Libre">Libre (montant personnalisé)</option>
+        </select>
+
+        <label for="baseAmount">Montant de Base Hors TVA (€) :</label>
+        <input type="number" id="baseAmount" step="0.01" min="0" value="183.14" required>
+
+        <label for="authorRightsPercent">Pourcentage Droits d'Auteur (%) :</label>
+        <input type="number" id="authorRightsPercent" step="0.01" min="0" value="5.5" required>
+
+        <label for="vatPerformancePercent">TVA sur Prestation (%) :</label>
+        <input type="number" id="vatPerformancePercent" step="0.01" min="0" value="6" required>
+
+        <label for="vatAuthorRightsPercent">TVA sur Droits d'Auteur (%) :</label>
+        <input type="number" id="vatAuthorRightsPercent" step="0.01" min="0" value="6" required>
+
+        <label for="withholdingTaxPercent">Précompte sur Droits d'Auteur (%) :</label>
+        <input type="number" id="withholdingTaxPercent" step="0.01" min="0" value="7.5" required>
+
+        <div class="button-group">
+            <button type="button" id="calculateBtn" onclick="calculateInvoice()">Générer la Facture</button>
+            <button type="button" id="resetBtn" onclick="resetForm()">Réinitialiser</button>
+        </div>
+        <small>&copy;VocalLise, 2025</small>
+    </form>
+
+    <div id="results"></div>
+
+    <div id="invoice" contenteditable="true">
+        <div class="invoice-header">
+            <div class="sender">
+                <strong>VocalLise</strong><br>
+                Avenue du Col Vert, 3 Bte 6<br>
+                B‑1170 Watermael‑Boitsfort<br>
+                TVA : BE 1012.554.987<br>
+                IBAN : BE06 3632 4686 3222<br>
+                BIC : BBRUBEBBXXX
+            </div>
+            <div class="client">
+                <pre id="clientDisplay">A l'attention de :
+[Nom du client]
+[Rue du client]
+[Code postal et localité du client]
+[N° TVA client (si applicable)]</pre>
+            </div>
+        </div>
+
+        <div class="dates">
+            <div class="date-item">
+                <strong>Numéro de facture :</strong> <span id="invoiceNumDisplay">2025-001</span>
+            </div>
+            <div class="date-item">
+                <strong>Date de facture :</strong> <span id="invoiceDateDisplay"></span>
+            </div>
+            <div class="date-item">
+                <strong>Date de la prestation :</strong> <span id="prestationDateDisplay"></span>
+            </div>
+        </div>
+
+        <p><strong>Prestation :</strong> <span id="description"></span></p>
+
+        <table>
+            <tr><th>Montant Hors TVA - Prestation</th><td id="performanceExcl"></td></tr>
+            <tr><th>Montant Hors TVA - Droits d'Auteur</th><td id="authorRightsExcl"></td></tr>
+            <tr><th>TVA sur Prestation</th><td id="vatPerformance"></td></tr>
+            <tr><th>TVA sur Droits d'Auteur</th><td id="vatAuthorRights"></td></tr>
+            <tr><th>Total TVA</th><td id="totalVat"></td></tr>
+            <tr class="total-row"><th>Total Général TVA Comprise</th><td id="totalIncl"></td></tr>
+            <tr><th>Précompte sur Droits d'Auteur</th><td id="withholdingTax"></td></tr>
+            <tr class="total-row"><th>Montant Net à Payer</th><td id="amountToPay"></td></tr>
+        </table>
+
+        <p style="margin-top: 50px; font-size: 14px; color: #666;">
+            Merci pour votre confiance !<br>
+            Payable dans les 30 jours fin de mois par virement bancaire sur le compte indiqué ci-dessus.
+        </p>
+    </div>
+
+    <script>
+        function updateBaseAmount() {
+            const serviceType = document.getElementById('serviceType').value;
+            const baseAmountInput = document.getElementById('baseAmount');
+            const authorRightsInput = document.getElementById('authorRightsPercent');
+
+            if (serviceType === 'Mini service') {
+                baseAmountInput.value = 183.14;
+                authorRightsInput.value = 5.5;
+                baseAmountInput.disabled = true;
+            } else if (serviceType === 'Service') {
+                baseAmountInput.value = 257.78;
+                authorRightsInput.value = 5.5;
+                baseAmountInput.disabled = true;
+            } else if (serviceType === 'Service chant') {
+                baseAmountInput.value = 385.35;
+                authorRightsInput.value = 5.5;
+                baseAmountInput.disabled = true;
+            } else if (serviceType === 'Service docu') {
+                baseAmountInput.value = 249.15;
+                authorRightsInput.value = 5.5;
+                baseAmountInput.disabled = true;
+            } else if (serviceType === 'Service Web') {
+                baseAmountInput.value = 467.62;
+                authorRightsInput.value = 15;
+                baseAmountInput.disabled = true;
+            } else if (serviceType === 'Libre') {
+                baseAmountInput.value = '';
+                authorRightsInput.value = 5.5;
+                baseAmountInput.disabled = false;
+                baseAmountInput.focus();
+            }
+        }
+
+        function calculateInvoice() {
+            const baseAmount = parseFloat(document.getElementById('baseAmount').value);
+            const authorRightsPct = parseFloat(document.getElementById('authorRightsPercent').value) / 100;
+            const vatPerformancePct = parseFloat(document.getElementById('vatPerformancePercent').value) / 100;
+            const vatAuthorRightsPct = parseFloat(document.getElementById('vatAuthorRightsPercent').value) / 100;
+            const withholdingPct = parseFloat(document.getElementById('withholdingTaxPercent').value) / 100;
+            const serviceDesc = document.getElementById('serviceType').value;
+
+            if (isNaN(baseAmount) || baseAmount <= 0) {
+                alert('Veuillez saisir un montant de base valide et positif.');
+                return;
+            }
+
+            // Calculs
+            const authorRightsExcl = baseAmount * authorRightsPct;
+            const performanceExcl = baseAmount - authorRightsExcl;
+
+            const vatPerformance = performanceExcl * vatPerformancePct;
+            const vatAuthorRights = authorRightsExcl * vatAuthorRightsPct;
+            const totalVat = vatPerformance + vatAuthorRights;
+
+            const totalIncl = baseAmount + totalVat;
+
+            const withholdingTax = authorRightsExcl * withholdingPct;
+
+            const amountToPay = totalIncl - withholdingTax;
+
+            // Dates par défaut (date du jour : 14/12/2025)
+            const today = new Date();
+            const formattedToday = today.toLocaleDateString('fr-BE');
+
+            // Remplissage de la facture
+            document.getElementById('description').textContent = serviceDesc;
+            document.getElementById('invoiceNumDisplay').textContent = '2025-001';
+            document.getElementById('invoiceDateDisplay').textContent = formattedToday;
+            document.getElementById('prestationDateDisplay').textContent = formattedToday;
+
+            document.getElementById('performanceExcl').textContent = performanceExcl.toFixed(2) + ' €';
+            document.getElementById('authorRightsExcl').textContent = authorRightsExcl.toFixed(2) + ' €';
+            document.getElementById('vatPerformance').textContent = vatPerformance.toFixed(2) + ' €';
+            document.getElementById('vatAuthorRights').textContent = vatAuthorRights.toFixed(2) + ' €';
+            document.getElementById('totalVat').textContent = totalVat.toFixed(2) + ' €';
+            document.getElementById('totalIncl').textContent = totalIncl.toFixed(2) + ' €';
+            document.getElementById('withholdingTax').textContent = withholdingTax.toFixed(2) + ' €';
+            document.getElementById('amountToPay').textContent = amountToPay.toFixed(2) + ' €';
+
+            // Réinitialise le placeholder client par défaut
+            document.getElementById('clientDisplay').textContent = `A l'attention de :
+[Nom du client]
+[Rue du client]
+[Code postal et localité du client]
+[N° TVA client (si applicable)]`;
+
+            document.getElementById('results').innerHTML = `
+                <h2>Facture générée !</h2>
+                <p>La facture ci-dessous est <strong>modifiable directement</strong> (cliquez dessus pour éditer le texte : numéro, dates, coordonnées client...).</p>
+                <p>Utilisez Ctrl+P pour imprimer ou enregistrer en PDF.</p>
+            `;
+
+            document.getElementById('invoice').style.display = 'block';
+            document.getElementById('invoice').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function resetForm() {
+            document.getElementById('invoiceForm').reset();
+            document.getElementById('serviceType').value = 'Mini service';
+            updateBaseAmount();
+            document.getElementById('results').innerHTML = '';
+            document.getElementById('invoice').style.display = 'none';
+        }
+
+        // Initialisation
+        window.onload = function() {
+            updateBaseAmount();
+        };
+    </script>
+</body>
+</html>
