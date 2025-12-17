@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Facture prestation radio & chroniques</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
+<style>
+    body{font-family:Arial,Helvetica,sans-serif;background:#f5f5f5;padding:1rem;}
+    .wrapper{max-width:960px;margin:auto;background:#fff;padding:1.5rem;
+            border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.12);}
+    h1{text-align:center;margin-top:0;}
+    .grid{display:grid;grid-template-columns:1fr;gap:1.5rem;}   /* une seule colonne */
+    .grid > div{display:flex;flex-direction:column;}
+    label{margin-top:0.8rem;font-weight:600;}
+    input, select{width:100%;padding:.5rem;margin-top:.3rem;box-sizing:border-box;}
+    .buttons{margin-top:1.5rem;display:flex;gap:.5rem;flex-wrap:wrap;}
+    button{flex:1 1 auto;padding:.7rem 1rem;font-size:1rem;border:none;
+           border-radius:4px;cursor:pointer;transition:background .2s;}
+    #calcBtn{background:#0066cc;color:#fff;}
+    #calcBtn:hover{background:#0055aa;}
+    #resetBtn{background:#777;color:#fff;}
+    #resetBtn:hover{background:#555;}
+    .error{color:#d00;margin-top:1rem;}
+    .invoice{margin-top:2rem;padding:1rem;background:#fafafa;border:1px solid #ddd;
+             border-radius:4px;overflow:auto;}
+    .invoice table{width:100%;border-collapse:collapse;font-size:0.95rem;}
+    .invoice th,.invoice td{border:1px solid #bbb;padding:4px;text-align:left;}
+    .invoice th{background:#eee;}
+    .right{text-align:right;}
+    @media(max-width:680px){
+        .grid{grid-template-columns:1fr;}
+        .invoice .header-table td{display:block;width:100%;}
+    }
+</style>
+</head>
+
+<body>
+<div class="wrapper">
+    <h1>Calcul de la facture IPM</h1>
+
+    <div class="grid">
+        <!-- ==================== 1️⃣ Paramètres (seule colonne) ==================== -->
+        <div>
+            <label for="daysSelect">Nombre de jours (défaut = 20)</label>
+            <select id="daysSelect">
+                <script>
+                    for(let i=1;i<=30;i++){
+                        const o=document.createElement('option');
+                        o.value=i;
+                        o.text=`${i} jour${i>1?'s':''}`;
+                        if(i===20) o.selected=true;
+                        document.currentScript.parentNode.appendChild(o);
+                    }
+                </script>
+            </select>
+
+            <label for="hourRate">Tarif horaire (€) (défaut = 25)</label>
+            <input type="number" id="hourRate" step="0.01" value="25">
+
+            <label for="hoursPerDay">Heures par jour (défaut = 8)</label>
+            <input type="number" id="hoursPerDay" step="0.01" value="8">
+
+            <label for="prestaPct">Part de la prestation (%) (défaut = 60)</label>
+            <input type="number" id="prestaPct" step="0.01" value="60">
+
+            <label for="rightsPct">Part des droits d’auteur (%) (défaut = 40)</label>
+            <input type="number" id="rightsPct" step="0.01" value="40">
+
+            <label for="vatPrestaPct">TVA sur la prestation (%) (défaut = 21)</label>
+            <input type="number" id="vatPrestaPct" step="0.01" value="21">
+
+            <label for="vatRightsPct">TVA sur les droits d’auteur (%) (défaut = 6)</label>
+            <input type="number" id="vatRightsPct" step="0.01" value="6">
+
+            <label for="precomptePct">Précompte mobilier (%) (défaut = 7,5)</label>
+            <input type="number" id="precomptePct" step="0.01" value="7.5">
+        </div>
+    </div>
+
+    <div class="buttons">
+        <button id="calcBtn">Calculer la facture</button>
+        <button id="resetBtn">Réinitialiser</button>
+    </div>
+
+    <p class="error" id="errorMsg"></p>
+
+    <!-- ==================== 2️⃣ Facture HTML (coordonnées client incluses) ==================== -->
+    <div class="invoice" id="invoiceBox" style="display:none;"></div>
+<small>&copy;VocaLLise, 2025</small>
+</div>
+
+<script>
+/* -------------------------------------------------------------
+   Utilitaires
+   ------------------------------------------------------------- */
+function fmt(v){ return Number(v).toLocaleString('fr-FR',
+            {minimumFractionDigits:2, maximumFractionDigits:2}); }
+
+/* -------------------------------------------------------------
+   Calcul et génération de la facture
+   ------------------------------------------------------------- */
+document.getElementById('calcBtn').addEventListener('click', () => {
+    const err = document.getElementById('errorMsg'); err.textContent='';
+
+    const days      = parseInt(document.getElementById('daysSelect').value);
+    const hourRate  = parseFloat(document.getElementById('hourRate').value);
+    const hrsDay    = parseFloat(document.getElementById('hoursPerDay').value);
+    const prestaPct = parseFloat(document.getElementById('prestaPct').value);
+    const rightsPct = parseFloat(document.getElementById('rightsPct').value);
+    const vatPrePct = parseFloat(document.getElementById('vatPrestaPct').value);
+    const vatRigPct = parseFloat(document.getElementById('vatRightsPct').value);
+    const precompPct= parseFloat(document.getElementById('precomptePct').value);
+
+    // validation rapide
+    if([hourRate,hrsDay,prestaPct,rightsPct,vatPrePct,vatRigPct,precompPct]
+        .some(v=>isNaN(v)||v<0)){
+        err.textContent='Veuillez vérifier les valeurs saisies.';
+        return;
+    }
+
+    // ---- Calculs ----
+    const totalHours   = days * hrsDay;
+    const baseAmount   = totalHours * hourRate;                     // montant brut
+    const prestationHT = baseAmount * (prestaPct/100);
+    const rightsHT     = baseAmount * (rightsPct/100);
+    const totalHT      = prestationHT + rightsHT;
+
+    const vatPresta    = prestationHT * (vatPrePct/100);
+    const vatRights    = rightsHT * (vatRigPct/100);
+    const totalVAT     = vatPresta + vatRights;
+
+    const totalTTC     = totalHT + totalVAT;
+    const precompte    = rightsHT * (precompPct/100);   // précompte sur les droits d’auteur
+    const netPayable   = totalTTC - precompte;
+
+    // ---- Date, numéro de facture ----
+    const today = new Date();
+    const invDate = today.toLocaleDateString('fr-FR');
+    const monthYear = today.toLocaleDateString('fr-FR',{month:'2-digit',year:'numeric'});
+    const invoiceNumber = (()=>{                     // persistance simple via localStorage
+        const key='lastInvoice';
+        let n=parseInt(localStorage.getItem(key)||'0')+1;
+        localStorage.setItem(key,n);
+        const yr=today.getFullYear();
+        return `${yr}-${String(n).padStart(3,'0')}`;
+    })();
+
+    // ---- Données émetteur / client (dans la facture) ----
+    const emitter = {
+        name:   'VocalLise',
+        street: 'Avenue du Col Vert, 3 Bte 6',
+        loc:    'B‑1170 Watermael‑Boitsfort',
+        vat:    'BE 1012.554.987',
+        iban:   'BE06 3632 4686 3222',
+        bic:    'BBRUBEBBXXX'
+    };
+
+    const client = {
+        name:   'IPM Radio SA',
+        street: 'Rue des Francs, 79',
+        loc:    '1040 Etterbeek',
+        vat:    'BE 0479.090.720'
+    };
+
+    const description = `Edition LN l'Aprem, rédaction de chroniques et agenda - ${monthYear}/${days}j`;
+
+    /* ---------------------------------------------------------
+       Construction du HTML de la facture (coordonnées côte à côte)
+       --------------------------------------------------------- */
+    const html = `
+        <h2 style="text-align:center;margin:0;">Facture</h2>
+
+        <!-- En‑tête avec coordonnées expéditeur / client côte à côte -->
+        <table class="header-table" style="margin-top:1rem;">
+            <tr>
+                <td style="vertical-align:top;">
+                    <strong>${emitter.name}</strong><br>
+                    ${emitter.street}<br>
+                    ${emitter.loc}<br>
+                    TVA&nbsp;: ${emitter.vat}<br>
+                    IBAN&nbsp;: ${emitter.iban}<br>
+                    BIC&nbsp;: ${emitter.bic}
+                </td>
+                <td style="vertical-align:top; text-align:right;">
+                    <strong>${client.name}</strong><br>
+                    ${client.street}<br>
+                    ${client.loc}<br>
+                    TVA&nbsp;: ${client.vat}
+                </td>
+            </tr>
+            <tr>
+                <td colspan="2" class="right"><strong>Facture n° ${invoiceNumber}</strong><br>
+                    Date d’émission&nbsp;: ${invDate}<br>
+                    Date de prestation&nbsp;: ${invDate}
+                </td>
+            </tr>
+        </table>
+
+        <table style="margin-top:1rem;">
+            <tr><td colspan="4"><strong>Description</strong> : ${description}</td></tr>
+        </table>
+
+        <table style="margin-top:1rem;">
+            <thead>
+                <tr>
+                    <th>Désignation</th>
+                    <th class="right">Qté</th>
+                    <th class="right">PU HT (€)</th>
+                    <th class="right">Montant HT (€)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Prestation (${prestaPct} %)</td>
+                    <td class="right">${days}</td>
+                    <td class="right">${fmt(prestationHT/days)}</td>
+                    <td class="right">${fmt(prestationHT)}</td>
+                </tr>
+                <tr>
+                    <td>Droits d’auteur (${rightsPct} %)</td>
+                    <td class="right">${days}</td>
+                    <td class="right">${fmt(rightsHT/days)}</td>
+                    <td class="right">${fmt(rightsHT)}</td>
+                </tr>
+                <tr>
+                    <td colspan="3"><strong>Sous‑total HT</strong></td>
+                    <td class="right"><strong>${fmt(totalHT)} €</strong></td>
+                </tr>
+                <tr>
+                    <td colspan="3">TVA prestation (${vatPrePct} %)</td>
+                    <td class="right">${fmt(vatPresta)} €</td>
+                </tr>
+                <tr>
+                    <td colspan="3">TVA droits d’auteur (${vatRigPct} %)</td>
+                    <td class="right">${fmt(vatRights)} €</td>
+                </tr>
+                <tr>
+                    <td colspan="3"><strong>Total TVA</strong></td>
+                    <td class="right"><strong>${fmt(totalVAT)} €</strong></td>
+                </tr>
+                <tr>
+                    <td colspan="3"><strong>Total TTC (hors précompte)</strong></td>
+                    <td class="right"><strong>${fmt(totalTTC)} €</strong></td>
+                </tr>
+                <tr>
+                    <td colspan="3">Précompte mobilier (${precompPct} %)</td>
+                    <td class="right">${fmt(precompte)} €</td>
+                </tr>
+                <tr>
+                    <td colspan="3"><strong>Net à payer (TTC − précompte)</strong></td>
+                    <td class="right"><strong>${fmt(netPayable)} €</strong></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <p style="margin-top:1rem;">
+            Conditions de paiement : 30 jours fin de mois.<br>
+            Pénalités de retard : 10 % du montant TTC + indemnité forfaitaire de 40 €.
+        </p>
+    `;
+
+    const box = document.getElementById('invoiceBox');
+    box.innerHTML = html;
+    box.style.display = 'block';
+    document.getElementById('errorMsg').textContent = '';
+});
+
+/* -------------------------------------------------------------
+   Réinitialiser le formulaire
+   ------------------------------------------------------------- */
+document.getElementById('resetBtn').addEventListener('click', () => {
+    document.getElementById('daysSelect').value = '20';
+    document.getElementById('hourRate').value = '25';
+    document.getElementById('hoursPerDay').value = '8';
+    document.getElementById('prestaPct').value = '60';
+    document.getElementById('rightsPct').value = '40';
+    document.getElementById('vatPrestaPct').value = '21';
+    document.getElementById('vatRightsPct').value = '6';
+    document.getElementById('precomptePct').value = '7.5';
+    document.getElementById('errorMsg').textContent = '';
+    document.getElementById('invoiceBox').style.display = 'none';
+});
+</script>
+</body>
+</html>
